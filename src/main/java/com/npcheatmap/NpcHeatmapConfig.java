@@ -41,4 +41,15 @@ public interface NpcHeatmapConfig extends Config
 	{
 		return true;
 	}
+
+	@ConfigItem(
+		keyName = "trackSouthWestTileOnly",
+		name = "Track south west tile only",
+		description = "When enabled, only the south-west tile of an NPC is tracked. When disabled, every tile the NPC occupies is tracked.",
+		position = 3
+	)
+	default boolean trackSouthWestTileOnly()
+	{
+		return true;
+	}
 }

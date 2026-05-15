@@ -140,21 +140,45 @@ public class NpcHeatmapPlugin extends Plugin
 				continue;
 			}
 
-			WorldPoint trueTile = npc.getWorldLocation();
+			WorldPoint southWestTile = npc.getWorldLocation();
 			if (client.isInInstancedRegion())
 			{
 				LocalPoint southWestLocalPoint = new LocalPoint(
 					npc.getLocalLocation().getX() - (npc.getComposition().getSize() - 1) * Perspective.LOCAL_TILE_SIZE / 2,
 					npc.getLocalLocation().getY() - (npc.getComposition().getSize() - 1) * Perspective.LOCAL_TILE_SIZE / 2
 				);
-				trueTile = WorldPoint.fromLocal(client, southWestLocalPoint);
+				southWestTile = WorldPoint.fromLocal(client, southWestLocalPoint);
 			}
 
-			if (trueTile != null)
+			if (southWestTile == null)
+			{
+				continue;
+			}
+
+			if (config.trackSouthWestTileOnly())
 			{
 				tileCountsByNpcName
 					.computeIfAbsent(npcNameLower, name -> new ConcurrentHashMap<>())
-					.merge(trueTile, 1, Integer::sum);
+					.merge(southWestTile, 1, Integer::sum);
+			}
+			else
+			{
+				int npcSize = npc.getComposition().getSize();
+				Map<WorldPoint, Integer> tileCounts = tileCountsByNpcName
+					.computeIfAbsent(npcNameLower, name -> new ConcurrentHashMap<>());
+
+				for (int xOffset = 0; xOffset < npcSize; xOffset++)
+				{
+					for (int yOffset = 0; yOffset < npcSize; yOffset++)
+					{
+						WorldPoint occupiedTile = new WorldPoint(
+							southWestTile.getX() + xOffset,
+							southWestTile.getY() + yOffset,
+							southWestTile.getPlane()
+						);
+						tileCounts.merge(occupiedTile, 1, Integer::sum);
+					}
+				}
 			}
 		}
 	}

@@ -122,10 +122,10 @@ public class NpcHeatmapPlugin extends Plugin
 				continue;
 			}
 
-			WorldPoint trueTile = WorldPoint.fromLocalInstance(client, npc.getLocalLocation());
-			if (trueTile == null)
+			WorldPoint trueTile = npc.getWorldLocation();
+			if (client.isInInstancedRegion())
 			{
-				trueTile = npc.getWorldLocation();
+				trueTile = WorldPoint.fromLocalInstance(client, npc.getLocalLocation());
 			}
 
 			if (trueTile != null)

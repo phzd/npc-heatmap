@@ -15,7 +15,6 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import javax.inject.Inject;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +29,9 @@ import java.util.stream.Collectors;
 )
 public class NpcHeatmapPlugin extends Plugin
 {
+	private static final String CONFIG_GROUP = "npcheatmap";
+	private static final String HEATMAP_KEY = "heatmapData";
+
 	@Inject
 	private Client client;
 
@@ -42,30 +44,25 @@ public class NpcHeatmapPlugin extends Plugin
 	@Inject
 	private NpcHeatmapOverlay overlay;
 
-	/**
-	 * WorldPoint -> tick count accumulated across all tracked NPCs.
-	 * ConcurrentHashMap so the overlay can iterate safely on the render thread
-	 * while the game thread writes on ticks.
-	 */
-	private final Map<WorldPoint, Integer> heatmap = new ConcurrentHashMap<>();
+	@Inject
+	private ConfigManager configManager;
 
-	/**
-	 * Lower-cased NPC names derived from config, rebuilt on config change.
-	 */
-	private Set<String> trackedNames = new HashSet<>();
+	private final Map<WorldPoint, Integer> tileCounts = new ConcurrentHashMap<>();
+	private Set<String> trackedNpcNames = new HashSet<>();
 
 	@Override
 	protected void startUp()
 	{
-		rebuildTrackedNames();
+		loadHeatmap();
+		rebuildTrackedNpcNames();
 		overlayManager.add(overlay);
 	}
 
 	@Override
 	protected void shutDown()
 	{
+		saveHeatmap();
 		overlayManager.remove(overlay);
-		heatmap.clear();
 	}
 
 	@Provides
@@ -77,24 +74,21 @@ public class NpcHeatmapPlugin extends Plugin
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
-		if (!"npcheatmap".equals(event.getGroup()))
+		if (!CONFIG_GROUP.equals(event.getGroup()))
 		{
 			return;
 		}
 
 		if ("npcNames".equals(event.getKey()))
 		{
-			// Clear existing data when the tracked NPC list changes so stale
-			// tiles from previously tracked NPCs do not persist.
-			heatmap.clear();
-			rebuildTrackedNames();
+			rebuildTrackedNpcNames();
 		}
 	}
 
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
-		if (trackedNames.isEmpty())
+		if (trackedNpcNames.isEmpty())
 		{
 			return;
 		}
@@ -112,48 +106,90 @@ public class NpcHeatmapPlugin extends Plugin
 				continue;
 			}
 
-			if (!trackedNames.contains(npc.getName().toLowerCase()))
+			if (!trackedNpcNames.contains(npc.getName().toLowerCase()))
 			{
 				continue;
 			}
 
-			WorldPoint tile = WorldPoint.fromLocalInstance(client, npc.getLocalLocation());
-			if (tile == null)
+			WorldPoint trueTile = WorldPoint.fromLocalInstance(client, npc.getLocalLocation());
+			if (trueTile == null)
 			{
-				tile = npc.getWorldLocation();
+				trueTile = npc.getWorldLocation();
 			}
 
-			if (tile != null)
+			if (trueTile != null)
 			{
-				heatmap.merge(tile, 1, Integer::sum);
+				tileCounts.merge(trueTile, 1, Integer::sum);
 			}
 		}
 	}
 
-	/**
-	 * Returns an unmodifiable view of the heatmap for the overlay to read.
-	 */
-	public Map<WorldPoint, Integer> getHeatmap()
+	public Map<WorldPoint, Integer> getTileCounts()
 	{
-		return Collections.unmodifiableMap(heatmap);
+		return Collections.unmodifiableMap(tileCounts);
 	}
 
-	// -------------------------------------------------------------------------
-	// Helpers
-	// -------------------------------------------------------------------------
+	private void saveHeatmap()
+	{
+		if (tileCounts.isEmpty())
+		{
+			configManager.unsetConfiguration(CONFIG_GROUP, HEATMAP_KEY);
+			return;
+		}
 
-	private void rebuildTrackedNames()
+		String serialised = tileCounts.entrySet().stream()
+			.map(entry ->
+			{
+				WorldPoint worldPoint = entry.getKey();
+				return worldPoint.getX() + "," + worldPoint.getY() + "," + worldPoint.getPlane() + "," + entry.getValue();
+			})
+			.collect(Collectors.joining("|"));
+
+		configManager.setConfiguration(CONFIG_GROUP, HEATMAP_KEY, serialised);
+	}
+
+	private void loadHeatmap()
+	{
+		String raw = configManager.getConfiguration(CONFIG_GROUP, HEATMAP_KEY);
+		if (raw == null || raw.isBlank())
+		{
+			return;
+		}
+
+		for (String entry : raw.split("\\|"))
+		{
+			String[] parts = entry.split(",");
+			if (parts.length != 4)
+			{
+				continue;
+			}
+
+			try
+			{
+				int worldX = Integer.parseInt(parts[0]);
+				int worldY = Integer.parseInt(parts[1]);
+				int plane = Integer.parseInt(parts[2]);
+				int tickCount = Integer.parseInt(parts[3]);
+				tileCounts.merge(new WorldPoint(worldX, worldY, plane), tickCount, Integer::sum);
+			}
+			catch (NumberFormatException ignored)
+			{
+			}
+		}
+	}
+
+	private void rebuildTrackedNpcNames()
 	{
 		String raw = config.npcNames();
 		if (raw == null || raw.isBlank())
 		{
-			trackedNames = new HashSet<>();
+			trackedNpcNames = new HashSet<>();
 			return;
 		}
 
-		trackedNames = Arrays.stream(raw.split(","))
+		trackedNpcNames = Arrays.stream(raw.split(","))
 			.map(String::trim)
-			.filter(s -> !s.isEmpty())
+			.filter(name -> !name.isEmpty())
 			.map(String::toLowerCase)
 			.collect(Collectors.toSet());
 	}

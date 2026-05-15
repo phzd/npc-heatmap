@@ -34,19 +34,19 @@ public class NpcHeatmapOverlay extends Overlay
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		Map<WorldPoint, Integer> heatmap = plugin.getHeatmap();
-		if (heatmap.isEmpty())
+		Map<WorldPoint, Integer> tileCounts = plugin.getTileCounts();
+		if (tileCounts.isEmpty())
 		{
 			return null;
 		}
 
-		int maxCount = heatmap.values().stream().mapToInt(Integer::intValue).max().orElse(1);
+		int highestTileCount = tileCounts.values().stream().mapToInt(Integer::intValue).max().orElse(1);
 		int opacity = config.tileOpacity();
 
-		for (Map.Entry<WorldPoint, Integer> entry : heatmap.entrySet())
+		for (Map.Entry<WorldPoint, Integer> entry : tileCounts.entrySet())
 		{
 			WorldPoint worldPoint = entry.getKey();
-			int count = entry.getValue();
+			int tileCount = entry.getValue();
 
 			if (worldPoint.getPlane() != client.getPlane())
 			{
@@ -59,49 +59,41 @@ public class NpcHeatmapOverlay extends Overlay
 				continue;
 			}
 
-			Polygon poly = Perspective.getCanvasTilePoly(client, localPoint);
-			if (poly == null)
+			Polygon tilePoly = Perspective.getCanvasTilePoly(client, localPoint);
+			if (tilePoly == null)
 			{
 				continue;
 			}
 
-			float ratio = (float) count / maxCount;
-			Color fillColor = heatColor(ratio, opacity);
+			float heatRatio = (float) tileCount / highestTileCount;
+			Color tileColor = heatRatioToColor(heatRatio, opacity);
 
-			graphics.setColor(fillColor);
-			graphics.fillPolygon(poly);
+			graphics.setColor(tileColor);
+			graphics.fillPolygon(tilePoly);
 		}
 
 		return null;
 	}
 
-	/**
-	 * Maps a 0.0-1.0 ratio to a colour gradient:
-	 *   0.0 = green  (0,   255, 0)
-	 *   0.5 = yellow (255, 255, 0)
-	 *   1.0 = red    (255, 0,   0)
-	 */
-	private Color heatColor(float ratio, int alpha)
+	private Color heatRatioToColor(float heatRatio, int alpha)
 	{
-		int r;
-		int g;
+		int red;
+		int green;
 
-		if (ratio <= 0.5f)
+		if (heatRatio <= 0.5f)
 		{
-			// green -> yellow
-			r = Math.round(ratio * 2f * 255f);
-			g = 255;
+			red = Math.round(heatRatio * 2f * 255f);
+			green = 255;
 		}
 		else
 		{
-			// yellow -> red
-			r = 255;
-			g = Math.round((1f - (ratio - 0.5f) * 2f) * 255f);
+			red = 255;
+			green = Math.round((1f - (heatRatio - 0.5f) * 2f) * 255f);
 		}
 
-		r = Math.max(0, Math.min(255, r));
-		g = Math.max(0, Math.min(255, g));
+		red = Math.max(0, Math.min(255, red));
+		green = Math.max(0, Math.min(255, green));
 
-		return new Color(r, g, 0, alpha);
+		return new Color(red, green, 0, alpha);
 	}
 }

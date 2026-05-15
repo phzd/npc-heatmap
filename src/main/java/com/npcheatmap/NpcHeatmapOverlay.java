@@ -13,6 +13,7 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.Polygon;
+import java.util.HashMap;
 import java.util.Map;
 
 public class NpcHeatmapOverlay extends Overlay
@@ -34,45 +35,83 @@ public class NpcHeatmapOverlay extends Overlay
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		Map<WorldPoint, Integer> tileCounts = plugin.getTileCounts();
-		if (tileCounts.isEmpty())
+		Map<String, Map<WorldPoint, Integer>> tileCountsByNpcName = plugin.getTileCountsByNpcName();
+		if (tileCountsByNpcName.isEmpty())
 		{
 			return null;
 		}
 
-		int highestTileCount = tileCounts.values().stream().mapToInt(Integer::intValue).max().orElse(1);
 		int opacity = config.tileOpacity();
 
-		for (Map.Entry<WorldPoint, Integer> entry : tileCounts.entrySet())
+		for (Map.Entry<String, Map<WorldPoint, Integer>> npcEntry : tileCountsByNpcName.entrySet())
 		{
-			WorldPoint worldPoint = entry.getKey();
-			int tileCount = entry.getValue();
-
-			if (worldPoint.getPlane() != client.getPlane())
+			Map<WorldPoint, Integer> tileCounts = npcEntry.getValue();
+			if (tileCounts.isEmpty())
 			{
 				continue;
 			}
 
-			LocalPoint localPoint = LocalPoint.fromWorld(client, worldPoint);
-			if (localPoint == null)
+			int highestTileCount = tileCounts.values().stream().mapToInt(Integer::intValue).max().orElse(1);
+
+			for (Map.Entry<WorldPoint, Integer> tileEntry : tileCounts.entrySet())
 			{
-				continue;
+				WorldPoint worldPoint = tileEntry.getKey();
+				int tileCount = tileEntry.getValue();
+
+				if (worldPoint.getPlane() != client.getPlane())
+				{
+					continue;
+				}
+
+				if (!isHighestCountForTile(worldPoint, tileCount, npcEntry.getKey(), tileCountsByNpcName))
+				{
+					continue;
+				}
+
+				LocalPoint localPoint = LocalPoint.fromWorld(client, worldPoint);
+				if (localPoint == null)
+				{
+					continue;
+				}
+
+				Polygon tilePoly = Perspective.getCanvasTilePoly(client, localPoint);
+				if (tilePoly == null)
+				{
+					continue;
+				}
+
+				float heatRatio = (float) tileCount / highestTileCount;
+				Color tileColor = heatRatioToColor(heatRatio, opacity);
+
+				graphics.setColor(tileColor);
+				graphics.fillPolygon(tilePoly);
 			}
-
-			Polygon tilePoly = Perspective.getCanvasTilePoly(client, localPoint);
-			if (tilePoly == null)
-			{
-				continue;
-			}
-
-			float heatRatio = (float) tileCount / highestTileCount;
-			Color tileColor = heatRatioToColor(heatRatio, opacity);
-
-			graphics.setColor(tileColor);
-			graphics.fillPolygon(tilePoly);
 		}
 
 		return null;
+	}
+
+	private boolean isHighestCountForTile(
+		WorldPoint worldPoint,
+		int countForCurrentNpc,
+		String currentNpcName,
+		Map<String, Map<WorldPoint, Integer>> tileCountsByNpcName
+	) {
+		for (Map.Entry<String, Map<WorldPoint, Integer>> npcEntry : tileCountsByNpcName.entrySet())
+		{
+			if (npcEntry.getKey().equals(currentNpcName))
+			{
+				continue;
+			}
+
+			Integer otherNpcCount = npcEntry.getValue().get(worldPoint);
+			if (otherNpcCount != null && otherNpcCount > countForCurrentNpc)
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	private Color heatRatioToColor(float heatRatio, int alpha)

@@ -15,6 +15,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import javax.inject.Inject;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +31,7 @@ import java.util.stream.Collectors;
 public class NpcHeatmapPlugin extends Plugin
 {
 	private static final String CONFIG_GROUP = "npcheatmap";
-	private static final String HEATMAP_KEY = "heatmapData";
+	private static final String HEATMAP_KEY_PREFIX = "heatmapData_";
 
 	@Inject
 	private Client client;
@@ -47,21 +48,21 @@ public class NpcHeatmapPlugin extends Plugin
 	@Inject
 	private ConfigManager configManager;
 
-	private final Map<WorldPoint, Integer> tileCounts = new ConcurrentHashMap<>();
+	private final Map<String, Map<WorldPoint, Integer>> tileCountsByNpcName = new ConcurrentHashMap<>();
 	private Set<String> trackedNpcNames = new HashSet<>();
 
 	@Override
 	protected void startUp()
 	{
-		loadHeatmap();
 		rebuildTrackedNpcNames();
+		loadAllHeatmaps();
 		overlayManager.add(overlay);
 	}
 
 	@Override
 	protected void shutDown()
 	{
-		saveHeatmap();
+		saveAllHeatmaps();
 		overlayManager.remove(overlay);
 	}
 
@@ -81,7 +82,16 @@ public class NpcHeatmapPlugin extends Plugin
 
 		if ("npcNames".equals(event.getKey()))
 		{
+			Set<String> previousNames = trackedNpcNames;
 			rebuildTrackedNpcNames();
+
+			Set<String> removedNames = new HashSet<>(previousNames);
+			removedNames.removeAll(trackedNpcNames);
+
+			for (String removedName : removedNames)
+			{
+				tileCountsByNpcName.remove(removedName);
+			}
 		}
 	}
 
@@ -106,7 +116,8 @@ public class NpcHeatmapPlugin extends Plugin
 				continue;
 			}
 
-			if (!trackedNpcNames.contains(npc.getName().toLowerCase()))
+			String npcNameLower = npc.getName().toLowerCase();
+			if (!trackedNpcNames.contains(npcNameLower))
 			{
 				continue;
 			}
@@ -119,61 +130,75 @@ public class NpcHeatmapPlugin extends Plugin
 
 			if (trueTile != null)
 			{
-				tileCounts.merge(trueTile, 1, Integer::sum);
+				tileCountsByNpcName
+					.computeIfAbsent(npcNameLower, name -> new ConcurrentHashMap<>())
+					.merge(trueTile, 1, Integer::sum);
 			}
 		}
 	}
 
-	public Map<WorldPoint, Integer> getTileCounts()
+	public Map<String, Map<WorldPoint, Integer>> getTileCountsByNpcName()
 	{
-		return Collections.unmodifiableMap(tileCounts);
+		return Collections.unmodifiableMap(tileCountsByNpcName);
 	}
 
-	private void saveHeatmap()
+	private void saveAllHeatmaps()
 	{
-		if (tileCounts.isEmpty())
+		for (Map.Entry<String, Map<WorldPoint, Integer>> npcEntry : tileCountsByNpcName.entrySet())
 		{
-			configManager.unsetConfiguration(CONFIG_GROUP, HEATMAP_KEY);
-			return;
-		}
+			String npcName = npcEntry.getKey();
+			Map<WorldPoint, Integer> tileCounts = npcEntry.getValue();
 
-		String serialised = tileCounts.entrySet().stream()
-			.map(entry ->
+			if (tileCounts.isEmpty())
 			{
-				WorldPoint worldPoint = entry.getKey();
-				return worldPoint.getX() + "," + worldPoint.getY() + "," + worldPoint.getPlane() + "," + entry.getValue();
-			})
-			.collect(Collectors.joining("|"));
+				configManager.unsetConfiguration(CONFIG_GROUP, HEATMAP_KEY_PREFIX + npcName);
+				continue;
+			}
 
-		configManager.setConfiguration(CONFIG_GROUP, HEATMAP_KEY, serialised);
+			String serialised = tileCounts.entrySet().stream()
+				.map(entry ->
+				{
+					WorldPoint worldPoint = entry.getKey();
+					return worldPoint.getX() + "," + worldPoint.getY() + "," + worldPoint.getPlane() + "," + entry.getValue();
+				})
+				.collect(Collectors.joining("|"));
+
+			configManager.setConfiguration(CONFIG_GROUP, HEATMAP_KEY_PREFIX + npcName, serialised);
+		}
 	}
 
-	private void loadHeatmap()
+	private void loadAllHeatmaps()
 	{
-		String raw = configManager.getConfiguration(CONFIG_GROUP, HEATMAP_KEY);
-		if (raw == null || raw.isBlank())
+		for (String npcName : trackedNpcNames)
 		{
-			return;
-		}
-
-		for (String entry : raw.split("\\|"))
-		{
-			String[] parts = entry.split(",");
-			if (parts.length != 4)
+			String raw = configManager.getConfiguration(CONFIG_GROUP, HEATMAP_KEY_PREFIX + npcName);
+			if (raw == null || raw.isBlank())
 			{
 				continue;
 			}
 
-			try
+			Map<WorldPoint, Integer> tileCounts = tileCountsByNpcName
+				.computeIfAbsent(npcName, name -> new ConcurrentHashMap<>());
+
+			for (String entry : raw.split("\\|"))
 			{
-				int worldX = Integer.parseInt(parts[0]);
-				int worldY = Integer.parseInt(parts[1]);
-				int plane = Integer.parseInt(parts[2]);
-				int tickCount = Integer.parseInt(parts[3]);
-				tileCounts.merge(new WorldPoint(worldX, worldY, plane), tickCount, Integer::sum);
-			}
-			catch (NumberFormatException ignored)
-			{
+				String[] parts = entry.split(",");
+				if (parts.length != 4)
+				{
+					continue;
+				}
+
+				try
+				{
+					int worldX = Integer.parseInt(parts[0]);
+					int worldY = Integer.parseInt(parts[1]);
+					int plane = Integer.parseInt(parts[2]);
+					int tickCount = Integer.parseInt(parts[3]);
+					tileCounts.merge(new WorldPoint(worldX, worldY, plane), tickCount, Integer::sum);
+				}
+				catch (NumberFormatException ignored)
+				{
+				}
 			}
 		}
 	}

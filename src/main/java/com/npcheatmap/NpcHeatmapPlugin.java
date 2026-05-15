@@ -135,7 +135,7 @@ public class NpcHeatmapPlugin extends Plugin
 				continue;
 			}
 
-			if (npc.getHealthRatio() == 0)
+			if (config.ignoreDyingNpcs() && npc.getHealthRatio() == 0)
 			{
 				continue;
 			}

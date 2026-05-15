@@ -43,10 +43,21 @@ public interface NpcHeatmapConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "trackSouthWestTileOnly",
-		name = "Track south west tile only",
-		description = "When enabled, only the south-west tile of an NPC is tracked. When disabled, every tile the NPC occupies is tracked.",
+		keyName = "ignoreDyingNpcs",
+		name = "Ignore Dying NPCs",
+		description = "Do not track tile positions of NPCs that are currently dying",
 		position = 3
+	)
+	default boolean ignoreDyingNpcs()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "trackSouthWestTileOnly",
+		name = "Track south-west tile only",
+		description = "When enabled, only the south-west tile of an NPC is tracked. When disabled, every tile the NPC occupies is tracked.",
+		position = 4
 	)
 	default boolean trackSouthWestTileOnly()
 	{

@@ -30,4 +30,15 @@ public interface NpcHeatmapConfig extends Config
 	{
 		return 180;
 	}
+
+	@ConfigItem(
+		keyName = "ignoreAttackingNpcs",
+		name = "Ignore Attacking NPCs",
+		description = "Do not track tile positions of NPCs that are currently attacking the player",
+		position = 2
+	)
+	default boolean ignoreAttackingNpcs()
+	{
+		return true;
+	}
 }

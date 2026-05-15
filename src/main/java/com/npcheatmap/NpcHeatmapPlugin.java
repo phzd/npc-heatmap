@@ -1,7 +1,9 @@
 package com.npcheatmap;
 
 import com.google.inject.Provides;
+import net.runelite.api.Actor;
 import net.runelite.api.Client;
+import net.runelite.api.Player;
 import net.runelite.api.KeyCode;
 import net.runelite.api.MenuAction;
 import net.runelite.api.NPC;
@@ -124,6 +126,16 @@ public class NpcHeatmapPlugin extends Plugin
 
 			String npcNameLower = npc.getName().toLowerCase();
 			if (!trackedNpcNames.contains(npcNameLower))
+			{
+				continue;
+			}
+
+			if (config.ignoreAttackingNpcs() && npc.getInteracting() instanceof Player)
+			{
+				continue;
+			}
+
+			if (npc.getHealthRatio() == 0)
 			{
 				continue;
 			}

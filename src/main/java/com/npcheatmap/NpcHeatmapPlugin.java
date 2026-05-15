@@ -2,11 +2,16 @@ package com.npcheatmap;
 
 import com.google.inject.Provides;
 import net.runelite.api.Client;
+import net.runelite.api.KeyCode;
+import net.runelite.api.MenuAction;
 import net.runelite.api.NPC;
 import net.runelite.api.Perspective;
+import net.runelite.api.Tile;
+import net.runelite.api.WorldView;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -17,7 +22,6 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import javax.inject.Inject;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -146,6 +150,55 @@ public class NpcHeatmapPlugin extends Plugin
 	public Map<String, Map<WorldPoint, Integer>> getTileCountsByNpcName()
 	{
 		return Collections.unmodifiableMap(tileCountsByNpcName);
+	}
+
+	public void removeTile(WorldPoint worldPoint)
+	{
+		tileCountsByNpcName.values().forEach(tileCounts -> tileCounts.remove(worldPoint));
+	}
+
+	@Subscribe
+	public void onMenuEntryAdded(MenuEntryAdded event)
+	{
+		MenuAction menuAction = event.getMenuEntry().getType();
+		if (!client.isKeyPressed(KeyCode.KC_SHIFT))
+		{
+			return;
+		}
+
+		if (menuAction != MenuAction.WALK && menuAction != MenuAction.SET_HEADING)
+		{
+			return;
+		}
+
+		int worldViewId = event.getMenuEntry().getWorldViewId();
+		WorldView worldView = client.getWorldView(worldViewId);
+		if (worldView == null)
+		{
+			return;
+		}
+
+		Tile selectedTile = worldView.getSelectedSceneTile();
+		if (selectedTile == null)
+		{
+			return;
+		}
+
+		WorldPoint hoveredTile = WorldPoint.fromLocalInstance(client, selectedTile.getLocalLocation());
+
+		boolean tileIsTracked = tileCountsByNpcName.values().stream()
+			.anyMatch(tileCounts -> tileCounts.containsKey(hoveredTile));
+
+		if (!tileIsTracked)
+		{
+			return;
+		}
+
+		client.createMenuEntry(-1)
+			.setOption("Remove from heatmap")
+			.setTarget("")
+			.setType(MenuAction.RUNELITE)
+			.onClick(e -> removeTile(hoveredTile));
 	}
 
 	private void saveAllHeatmaps()

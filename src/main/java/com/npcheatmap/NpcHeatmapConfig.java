@@ -1,0 +1,33 @@
+package com.npcheatmap;
+
+import net.runelite.client.config.Config;
+import net.runelite.client.config.ConfigGroup;
+import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.Range;
+
+@ConfigGroup("npcheatmap")
+public interface NpcHeatmapConfig extends Config
+{
+	@ConfigItem(
+		keyName = "npcNames",
+		name = "NPC Names",
+		description = "Comma-separated list of NPC names to track (case-insensitive)",
+		position = 0
+	)
+	default String npcNames()
+	{
+		return "";
+	}
+
+	@Range(min = 0, max = 255)
+	@ConfigItem(
+		keyName = "tileOpacity",
+		name = "Tile Opacity",
+		description = "Opacity of the heatmap tile fill (0 = transparent, 255 = fully opaque)",
+		position = 1
+	)
+	default int tileOpacity()
+	{
+		return 180;
+	}
+}

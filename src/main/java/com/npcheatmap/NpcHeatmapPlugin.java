@@ -3,6 +3,8 @@ package com.npcheatmap;
 import com.google.inject.Provides;
 import net.runelite.api.Client;
 import net.runelite.api.NPC;
+import net.runelite.api.Perspective;
+import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.config.ConfigManager;
@@ -125,7 +127,11 @@ public class NpcHeatmapPlugin extends Plugin
 			WorldPoint trueTile = npc.getWorldLocation();
 			if (client.isInInstancedRegion())
 			{
-				trueTile = WorldPoint.fromLocalInstance(client, npc.getLocalLocation());
+				LocalPoint southWestLocalPoint = new LocalPoint(
+					npc.getLocalLocation().getX() - (npc.getComposition().getSize() - 1) * Perspective.LOCAL_TILE_SIZE / 2,
+					npc.getLocalLocation().getY() - (npc.getComposition().getSize() - 1) * Perspective.LOCAL_TILE_SIZE / 2
+				);
+				trueTile = WorldPoint.fromLocal(client, southWestLocalPoint);
 			}
 
 			if (trueTile != null)

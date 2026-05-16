@@ -55,6 +55,9 @@ public class NpcHeatmapPlugin extends Plugin
 	private NpcHeatmapOverlay overlay;
 
 	@Inject
+	private NpcHeatmapMinimapOverlay minimapOverlay;
+
+	@Inject
 	private ConfigManager configManager;
 
 	private final Map<String, Map<WorldPoint, Integer>> tileCountsByNpcName = new ConcurrentHashMap<>();
@@ -67,6 +70,7 @@ public class NpcHeatmapPlugin extends Plugin
 		rebuildTrackedNpcPatterns();
 		loadAllHeatmaps();
 		overlayManager.add(overlay);
+		overlayManager.add(minimapOverlay);
 	}
 
 	@Override
@@ -74,6 +78,7 @@ public class NpcHeatmapPlugin extends Plugin
 	{
 		saveAllHeatmaps();
 		overlayManager.remove(overlay);
+		overlayManager.remove(minimapOverlay);
 	}
 
 	@Provides

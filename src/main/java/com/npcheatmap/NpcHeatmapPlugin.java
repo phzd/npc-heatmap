@@ -1,7 +1,6 @@
 package com.npcheatmap;
 
 import com.google.inject.Provides;
-import net.runelite.api.Actor;
 import net.runelite.api.Client;
 import net.runelite.api.Player;
 import net.runelite.api.KeyCode;
@@ -22,6 +21,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @PluginDescriptor(
@@ -57,12 +58,13 @@ public class NpcHeatmapPlugin extends Plugin
 	private ConfigManager configManager;
 
 	private final Map<String, Map<WorldPoint, Integer>> tileCountsByNpcName = new ConcurrentHashMap<>();
-	private Set<String> trackedNpcNames = new HashSet<>();
+	private List<Pattern> trackedNpcPatterns = new ArrayList<>();
+	private List<String> rawTrackedPatternStrings = new ArrayList<>();
 
 	@Override
 	protected void startUp()
 	{
-		rebuildTrackedNpcNames();
+		rebuildTrackedNpcPatterns();
 		loadAllHeatmaps();
 		overlayManager.add(overlay);
 	}
@@ -90,23 +92,24 @@ public class NpcHeatmapPlugin extends Plugin
 
 		if ("npcNames".equals(event.getKey()))
 		{
-			Set<String> previousNames = trackedNpcNames;
-			rebuildTrackedNpcNames();
+			List<String> previousPatternStrings = rawTrackedPatternStrings;
+			rebuildTrackedNpcPatterns();
 
-			Set<String> removedNames = new HashSet<>(previousNames);
-			removedNames.removeAll(trackedNpcNames);
+			Set<String> removedPatternStrings = new HashSet<>(previousPatternStrings);
+			removedPatternStrings.removeAll(rawTrackedPatternStrings);
 
-			for (String removedName : removedNames)
-			{
-				tileCountsByNpcName.remove(removedName);
-			}
+			tileCountsByNpcName.keySet().removeIf(npcName ->
+				removedPatternStrings.stream().anyMatch(patternString ->
+					wildcardToPattern(patternString).matcher(npcName).matches()
+				)
+			);
 		}
 	}
 
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
-		if (trackedNpcNames.isEmpty())
+		if (trackedNpcPatterns.isEmpty())
 		{
 			return;
 		}
@@ -125,7 +128,7 @@ public class NpcHeatmapPlugin extends Plugin
 			}
 
 			String npcNameLower = npc.getName().toLowerCase();
-			if (!trackedNpcNames.contains(npcNameLower))
+			if (!matchesAnyPattern(npcNameLower))
 			{
 				continue;
 			}
@@ -260,20 +263,41 @@ public class NpcHeatmapPlugin extends Plugin
 
 			configManager.setConfiguration(CONFIG_GROUP, HEATMAP_KEY_PREFIX + npcName, serialised);
 		}
+
+		String allKeys = String.join("|", tileCountsByNpcName.keySet());
+		if (allKeys.isBlank())
+		{
+			configManager.unsetConfiguration(CONFIG_GROUP, "allHeatmapKeys");
+		}
+		else
+		{
+			configManager.setConfiguration(CONFIG_GROUP, "allHeatmapKeys", allKeys);
+		}
 	}
 
 	private void loadAllHeatmaps()
 	{
-		for (String npcName : trackedNpcNames)
+		String allKeys = configManager.getConfiguration(CONFIG_GROUP, "allHeatmapKeys");
+		if (allKeys == null || allKeys.isBlank())
 		{
-			String raw = configManager.getConfiguration(CONFIG_GROUP, HEATMAP_KEY_PREFIX + npcName);
+			return;
+		}
+
+		for (String savedNpcName : allKeys.split("\\|"))
+		{
+			if (!matchesAnyPattern(savedNpcName))
+			{
+				continue;
+			}
+
+			String raw = configManager.getConfiguration(CONFIG_GROUP, HEATMAP_KEY_PREFIX + savedNpcName);
 			if (raw == null || raw.isBlank())
 			{
 				continue;
 			}
 
 			Map<WorldPoint, Integer> tileCounts = tileCountsByNpcName
-				.computeIfAbsent(npcName, name -> new ConcurrentHashMap<>());
+				.computeIfAbsent(savedNpcName, name -> new ConcurrentHashMap<>());
 
 			for (String entry : raw.split("\\|"))
 			{
@@ -298,19 +322,54 @@ public class NpcHeatmapPlugin extends Plugin
 		}
 	}
 
-	private void rebuildTrackedNpcNames()
+	private void rebuildTrackedNpcPatterns()
 	{
 		String raw = config.npcNames();
 		if (raw == null || raw.isBlank())
 		{
-			trackedNpcNames = new HashSet<>();
+			trackedNpcPatterns = new ArrayList<>();
+			rawTrackedPatternStrings = new ArrayList<>();
 			return;
 		}
 
-		trackedNpcNames = Arrays.stream(raw.split(","))
+		rawTrackedPatternStrings = Arrays.stream(raw.split(","))
 			.map(String::trim)
 			.filter(name -> !name.isEmpty())
 			.map(String::toLowerCase)
-			.collect(Collectors.toSet());
+			.collect(Collectors.toList());
+
+		trackedNpcPatterns = rawTrackedPatternStrings.stream()
+			.map(this::wildcardToPattern)
+			.collect(Collectors.toList());
+	}
+
+	private boolean matchesAnyPattern(String npcName)
+	{
+		for (Pattern pattern : trackedNpcPatterns)
+		{
+			if (pattern.matcher(npcName).matches())
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private Pattern wildcardToPattern(String wildcardString)
+	{
+		StringBuilder regex = new StringBuilder("^");
+		for (char character : wildcardString.toCharArray())
+		{
+			if (character == '*')
+			{
+				regex.append(".*");
+			}
+			else
+			{
+				regex.append(Pattern.quote(String.valueOf(character)));
+			}
+		}
+		regex.append("$");
+		return Pattern.compile(regex.toString());
 	}
 }

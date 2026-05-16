@@ -28,7 +28,7 @@ public interface NpcHeatmapConfig extends Config
 	)
 	default int tileOpacity()
 	{
-		return 180;
+		return 127;
 	}
 
 	@ConfigItem(

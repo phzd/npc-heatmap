@@ -63,4 +63,15 @@ public interface NpcHeatmapConfig extends Config
 	{
 		return true;
 	}
+
+	@ConfigItem(
+		keyName = "showTileCount",
+		name = "Show tile count",
+		description = "Display the tick count above each heatmap tile",
+		position = 5
+	)
+	default boolean showTileCount()
+	{
+		return false;
+	}
 }

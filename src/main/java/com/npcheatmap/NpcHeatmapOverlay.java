@@ -11,7 +11,9 @@ import net.runelite.client.ui.overlay.OverlayPosition;
 import javax.inject.Inject;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.Polygon;
 import java.util.HashMap;
 import java.util.Map;
@@ -85,10 +87,32 @@ public class NpcHeatmapOverlay extends Overlay
 
 				graphics.setColor(tileColor);
 				graphics.fillPolygon(tilePoly);
+
+				if (config.showTileCount())
+				{
+					drawTileCount(graphics, tilePoly, tileCount);
+				}
 			}
 		}
 
 		return null;
+	}
+
+	private void drawTileCount(Graphics2D graphics, Polygon tilePoly, int tileCount)
+	{
+		String countText = String.valueOf(tileCount);
+		FontMetrics fontMetrics = graphics.getFontMetrics();
+		int textWidth = fontMetrics.stringWidth(countText);
+		int textHeight = fontMetrics.getAscent();
+
+		int centerX = (int) tilePoly.getBounds().getCenterX() - textWidth / 2;
+		int centerY = (int) tilePoly.getBounds().getCenterY() + textHeight / 2;
+
+		graphics.setColor(Color.BLACK);
+		graphics.drawString(countText, centerX + 1, centerY + 1);
+
+		graphics.setColor(Color.WHITE);
+		graphics.drawString(countText, centerX, centerY);
 	}
 
 	private boolean isHighestCountForTile(
